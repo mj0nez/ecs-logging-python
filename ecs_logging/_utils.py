@@ -136,7 +136,7 @@ def get_orjson_serializer():
 
     def serializer(data,sort):
         # type: (...,bool) -> bytes
-        return orjson.dumps(data,option=orjson.OPT_SORT_KEYS if sort else None)
+        return orjson.dumps(data,option=orjson.OPT_SORT_KEYS if sort else None, default=_json_dumps_fallback)
     
     return serializer
 
