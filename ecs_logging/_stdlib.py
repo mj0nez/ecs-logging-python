@@ -26,7 +26,7 @@ from ._utils import (
     collections_abc,
     de_dot,
     flatten_dict,
-    json_dumps,
+    json_dump_bytes,
     lru_cache,
     merge_dicts,
 )
@@ -86,6 +86,7 @@ class StdlibFormatter(logging.Formatter):
         stack_trace_limit=None,  # type: Optional[int]
         extra=None,  # type: Optional[Dict[str, Any]]
         exclude_fields=(),  # type: Sequence[str]
+        format_as_binary=False, # type: bool
     ):
         # type: (...) -> None
         """Initialize the ECS formatter.
@@ -137,6 +138,8 @@ class StdlibFormatter(logging.Formatter):
         self._exclude_fields = frozenset(exclude_fields)
         self._stack_trace_limit = stack_trace_limit
 
+        self._format_as_binary = format_as_binary
+
     def _record_error_type(self, record):
         # type: (logging.LogRecord) -> Optional[str]
         exc_info = record.exc_info
@@ -168,7 +171,11 @@ class StdlibFormatter(logging.Formatter):
     def format(self, record):
         # type: (logging.LogRecord) -> str
         result = self.format_to_ecs(record)
-        return json_dumps(result)
+        
+        if self._format_as_binary:
+            return json_dump_bytes(result)
+        else:
+            return json_dump_bytes(result).decode()
 
     def format_to_ecs(self, record):
         # type: (logging.LogRecord) -> Dict[str, Any]

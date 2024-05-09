@@ -45,7 +45,7 @@ __all__ = [
     "normalize_dict",
     "de_dot",
     "merge_dicts",
-    "json_dumps",
+    "json_dump_bytes",
     "TYPE_CHECKING",
     "typing",
     "lru_cache",
@@ -124,36 +124,49 @@ def merge_dicts(from_, into):
             into[key] = value
     return into
 
+def get_stdlib_json_serializer():
+    # type: () -> collections_abc.Callable[..., str]
+    return functools.partial(
+        json.dumps, sort_keys=True, separators=(",", ":"), default=_json_dumps_fallback
+    )
 
-def json_dumps(value):
-    # type: (Dict[str, Any]) -> str
+def get_orjson_serializer():
+    # type: () -> collections_abc.Callable[[..., bool], bytes]
+    import orjson
+
+    def serializer(data,sort):
+        # type: (...,bool) -> bytes
+        return orjson.dumps(data,option=orjson.OPT_SORT_KEYS if sort else None)
+    
+    return serializer
+
+def json_dump_bytes(value):
+    # type: (Dict[str, Any]) -> bytes
 
     # Ensure that the first three fields are '@timestamp',
     # 'log.level', and 'message' per ECS spec
-    ordered_fields = []
+    ordered_fields = {}
     try:
-        ordered_fields.append(("@timestamp", value.pop("@timestamp")))
+        ordered_fields["@timestamp"] =  value.pop("@timestamp")
     except KeyError:
         pass
 
     # log.level can either be nested or not nested so we have to try both
     try:
-        ordered_fields.append(("log.level", value["log"].pop("level")))
+        ordered_fields["log.level"] =  value["log"].pop("level")
         if not value["log"]:  # Remove the 'log' dictionary if it's now empty
             value.pop("log", None)
     except KeyError:
         try:
-            ordered_fields.append(("log.level", value.pop("log.level")))
+            ordered_fields["log.level"] = value.pop("log.level")
         except KeyError:
             pass
     try:
-        ordered_fields.append(("message", value.pop("message")))
+        ordered_fields["message"] = value.pop("message")
     except KeyError:
         pass
 
-    json_dumps = functools.partial(
-        json.dumps, sort_keys=True, separators=(",", ":"), default=_json_dumps_fallback
-    )
+    serializer = get_orjson_serializer()
 
     # Because we want to use 'sorted_keys=True' we manually build
     # the first three keys and then build the rest with json.dumps()
@@ -161,18 +174,16 @@ def json_dumps(value):
         # Need to call json.dumps() on values just in
         # case the given values aren't strings (even though
         # they should be according to the spec)
-        ordered_json = ",".join(f'"{k}":{json_dumps(v)}' for k, v in ordered_fields)
+
+        ordered_json = serializer(ordered_fields,sort=False)
         if value:
-            return "{{{},{}".format(
-                ordered_json,
-                json_dumps(value)[1:],
-            )
+            return ordered_json[:-1] +b"," + serializer(value,True)[1:]
         else:
-            return "{%s}" % ordered_json
+            return ordered_json
     # If there are no fields with ordering requirements we
     # pass everything into json.dumps()
     else:
-        return json_dumps(value)
+        return serializer(value,sort=True)
 
 
 def _json_dumps_fallback(value):

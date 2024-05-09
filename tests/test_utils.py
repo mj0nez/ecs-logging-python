@@ -16,7 +16,7 @@
 # under the License.
 
 import pytest
-from ecs_logging._utils import flatten_dict, de_dot, normalize_dict, json_dumps
+from ecs_logging._utils import flatten_dict, de_dot, normalize_dict, json_dump_bytes, get_orjson_serializer,get_stdlib_json_serializer
 
 
 def test_flatten_dict():
@@ -89,4 +89,6 @@ def test_normalize_dict_with_array():
     ],
 )
 def test_json_dumps(value, expected):
-    assert json_dumps(value) == expected
+    result = json_dump_bytes(value)
+
+    assert  result.decode() == expected

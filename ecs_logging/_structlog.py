@@ -14,21 +14,29 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+import json
+import functools
 
 import time
 import datetime
 from ._meta import ECS_VERSION
-from ._utils import json_dumps, normalize_dict, TYPE_CHECKING
+from ._utils import json_dump_bytes, normalize_dict, TYPE_CHECKING, collections_abc, get_stdlib_json_serializer
 
 if TYPE_CHECKING:
-    from typing import Any, Dict
+    from typing import Any, Dict, Union
 
 
 class StructlogFormatter:
     """ECS formatter for the ``structlog`` module"""
 
+    __slots__ = ("format_as_binary",)
+
+    def __init__(self, format_as_binary:bool=False) -> None:
+        self.format_as_binary = format_as_binary
+
+
     def __call__(self, _, name, event_dict):
-        # type: (Any, str, Dict[str, Any]) -> str
+        # type: (Any, str, Dict[str, Any]) -> Union[str,bytes]
 
         # Handle event -> message now so that stuff like `event.dataset` doesn't
         # cause problems down the line
@@ -36,7 +44,12 @@ class StructlogFormatter:
         event_dict = normalize_dict(event_dict)
         event_dict.setdefault("log", {}).setdefault("level", name.lower())
         event_dict = self.format_to_ecs(event_dict)
-        return json_dumps(event_dict)
+
+        if self.format_as_binary:
+            return json_dump_bytes(event_dict)
+        else:
+            return json_dump_bytes(event_dict).decode()
+        
 
     def format_to_ecs(self, event_dict):
         # type: (Dict[str, Any]) -> Dict[str, Any]
